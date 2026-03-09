@@ -294,7 +294,7 @@ def get_plug_height(completion_type, branch_inch):
 class PDFReport(FPDF):
     def header(self):
         """This runs automatically every time a new page is created."""
-        logo_path = "protaplogo.png"
+        logo_path = "logo.png"
         
         if os.path.exists(logo_path):
             # Place the logo at the top left
