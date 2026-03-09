@@ -828,32 +828,17 @@ st.markdown("---")
 
 # ---- RUN CALCULATION ----
 if st.button("🔨 Calculate", type="primary", use_container_width=True):
-    params = {
-        "header_od_inch": header_od_inch,
-        "branch_od_inch": branch_od_inch,
-        "design_pressure_bar": design_pressure,
-        "design_factor_F": design_factor_F,
-        "design_factor_E": design_factor_E,
-        "design_factor_T": design_factor_T,
-        "header_material": header_material,
-        "flange_material": flange_material,
-        "nozzle_tee_material": nozzle_tee_material,
-        "nozzle_ext_material": nozzle_ext_material_name,
-        "reinforcement_material": reinforcement_material,
-        "corrosion_allowance_mm": corrosion_allowance,
-        "reinforcement_type": reinforcement_type,
-        "fitting_type": fitting_type,
-        "nozzle_type": nozzle_type,
-        "completion_type": completion_type,
-        "guide_bar": guide_bar,
-        "header_wt_mm": header_wt,
-        "flange_wt_mm": flange_wt,
-        "nozzle_tee_wt_mm": nozzle_tee_wt,
-        "nozzle_ext_wt_mm": nozzle_ext_wt,
-        "reinforcement_wt_mm": reinforcement_wt,
-    }
+    # Calculate and store the results in Streamlit's Session State
+    st.session_state['calc_results'] = run_calculation(params)
+    st.session_state['calc_params'] = params
+    st.session_state['is_calculated'] = True
 
-    results = run_calculation(params)
+# Only display results if a calculation has been run and stored in the session
+if st.session_state.get('is_calculated', False):
+    
+    # Retrieve the stored data
+    results = st.session_state['calc_results']
+    saved_params = st.session_state['calc_params']
 
     if "error" in results:
         st.error(results["error"])
@@ -924,8 +909,8 @@ if st.button("🔨 Calculate", type="primary", use_container_width=True):
         # ---- Intermediate Calculation Details (Expandable) ----
         with st.expander("📊 Show All Intermediate Values"):
             st.json({
-                "Pressure (bar)": design_pressure,
-                "Pressure (psi)": design_pressure * 14.5,
+                "Pressure (bar)": saved_params["design_pressure_bar"],
+                "Pressure (psi)": saved_params["design_pressure_bar"] * 14.5,
                 "Header OD (mm)": results["header_od_mm"],
                 "Header OD (in)": results["header_od_mm"] / 25.4,
                 "Branch OD Db (mm)": results["Db_mm"],
@@ -977,8 +962,8 @@ if st.button("🔨 Calculate", type="primary", use_container_width=True):
             "Specification": specification
         }
         
-        # Generate the PDF bytes
-        pdf_bytes = create_pdf_report(project_data, params, results)
+        # Generate the PDF bytes (passing the saved_params instead of un-submitted UI params)
+        pdf_bytes = create_pdf_report(project_data, saved_params, results)
         
         # Display the download button
         st.download_button(
