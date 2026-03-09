@@ -1,6 +1,8 @@
 import streamlit as st
 import numpy as np
 import math
+import os
+import datetime
 from fpdf import FPDF
 
 # ============================================================
@@ -234,11 +236,10 @@ STEEL_DENSITY = 7900  # kg/m3
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS & PDF CLASS
 # ============================================================
 
 def get_pressure_class(pressure_bar):
-    """Determine pressure class from design pressure in bar (TEMPLATE!B9 logic)."""
     if pressure_bar < 21:
         return "150#"
     elif pressure_bar < 52:
@@ -251,11 +252,9 @@ def get_pressure_class(pressure_bar):
         return "XXXXXXX"
 
 def lookup_pipe_od_mm(inch):
-    """Lookup pipe OD in mm from inch value."""
     return PIPE_OD_LOOKUP.get(inch, None)
 
 def get_smys(material_name):
-    """Return (SMYS_metric_MPa, SMYS_us_psi) for a material name."""
     if material_name in PIPE_MATERIALS:
         return PIPE_MATERIALS[material_name]
     if material_name in FLANGE_MATERIALS:
@@ -263,7 +262,6 @@ def get_smys(material_name):
     return (0, 0)
 
 def get_nozzle_hole_id(branch_inch, fitting_type):
-    """Get the nozzle nominal hole diameter depending on fitting type."""
     if branch_inch in NOZZLE_DATA:
         if fitting_type == "Hot Tap":
             return NOZZLE_DATA[branch_inch]["hot_tap_id"]
@@ -272,23 +270,19 @@ def get_nozzle_hole_id(branch_inch, fitting_type):
     return 0
 
 def get_flange_wn_kg(pressure_class, branch_inch):
-    """Get WN flange weight in kg."""
     data = FL_WN.get(pressure_class, {})
     return data.get(branch_inch, 0) or 0
 
 def get_flange_bld_kg(pressure_class, branch_inch):
-    """Get BLD flange weight in kg."""
     data = FL_BLD.get(pressure_class, {})
     return data.get(branch_inch, 0) or 0
 
 def get_nozzle_weight_kg(branch_inch):
-    """Get nozzle (tee) weight in kg from TEE_DATA."""
     if branch_inch in TEE_DATA:
         return TEE_DATA[branch_inch]["wt_kgs"]
     return 0
 
 def get_plug_height(completion_type, branch_inch):
-    """Get plug height in mm for weight calculation."""
     if completion_type == "Aktif Tapa / Active Plug":
         return ACTIVE_PLUG_HEIGHTS.get(branch_inch, 0)
     elif completion_type == "Pasif Tapa / Passive Plug":
@@ -297,12 +291,33 @@ def get_plug_height(completion_type, branch_inch):
         return 0
     return 0
 
+class PDFReport(FPDF):
+    def header(self):
+        """This runs automatically every time a new page is created."""
+        logo_path = "logo.png"
+        
+        if os.path.exists(logo_path):
+            # Place the logo at the top left
+            self.image(logo_path, x=10, y=8, w=40)
+            # Push the starting Y-coordinate down so text doesn't overlap the logo
+            self.set_y(30)
+        else:
+            self.set_y(15)
+
+    def footer(self):
+        """This runs automatically at the bottom of every page."""
+        # Position cursor 15 mm from the bottom
+        self.set_y(-15)
+        self.set_font("Helvetica", style="I", size=8)
+        self.set_text_color(128, 128, 128) # Grey
+        # Print the certification and page numbers
+        self.multi_cell(0, 4, f"We hereby certify that these calculations are based on the specification referenced above and conform to the standards referenced therein (ASME B31.8). | Page {self.page_no()}", align="C")
+
 def create_pdf_report(project_info, params, results):
     """Generates a detailed ASME B31.8 compliant PDF report with formulas."""
-    pdf = FPDF()
+    pdf = PDFReport()
     pdf.add_page()
     
-    # --- Helper functions for formatting ---
     def section_title(title):
         pdf.ln(5)
         pdf.set_font("Helvetica", style="B", size=12)
@@ -321,7 +336,7 @@ def create_pdf_report(project_info, params, results):
         else:
             pdf.ln(6)
 
-    # --- Header ---
+    # --- Header (Main Title) ---
     pdf.set_font("Helvetica", style="B", size=16)
     pdf.cell(0, 10, "PROTAP Hot-Tap / Linestop Calculation Report", new_x="LMARGIN", new_y="NEXT", align="C")
     
@@ -332,10 +347,10 @@ def create_pdf_report(project_info, params, results):
     pdf.ln(5)
     pdf.set_font("Helvetica", style="B", size=14)
     if results['control_in2'] < 0:
-        pdf.set_text_color(0, 128, 0) # Green for Suitable
+        pdf.set_text_color(0, 128, 0) # Green
         pdf.cell(0, 10, f"OVERALL RESULT: {results['result']}", new_x="LMARGIN", new_y="NEXT", align="C", border=1)
     else:
-        pdf.set_text_color(255, 0, 0) # Red for Not Suitable
+        pdf.set_text_color(255, 0, 0) # Red
         pdf.cell(0, 10, f"OVERALL RESULT: {results['result']}", new_x="LMARGIN", new_y="NEXT", align="C", border=1)
     pdf.set_text_color(0, 0, 0) # Reset to black
 
@@ -404,7 +419,6 @@ def create_pdf_report(project_info, params, results):
     row("Control (Ar - Total):", f"{results['control_mm2']:.2f} mm2", "Must be <= 0")
 
     # --- 6. Additional Checks & Weights ---
-    # Add new page if space is low to prevent messy breaks
     if pdf.get_y() > 230:
         pdf.add_page()
         
@@ -415,11 +429,6 @@ def create_pdf_report(project_info, params, results):
     pdf.ln(2)
     row("Est. Total Weight:", f"{results['total_weight_kg']:.2f} kg", "Includes flanges, nozzle, plug, and reinf.")
 
-    # --- Footer ---
-    pdf.ln(10)
-    pdf.set_font("Helvetica", style="I", size=8)
-    pdf.multi_cell(0, 4, "We hereby certify that these calculations are based on the specification referenced above and conform to the standards referenced therein (ASME B31.8).")
-    
     return bytes(pdf.output())
 
 
@@ -428,13 +437,9 @@ def create_pdf_report(project_info, params, results):
 # ============================================================
 
 def run_calculation(params):
-    """
-    Replicate the TEMPLATE sheet calculations.
-    Returns a dict of all intermediate and final results.
-    """
-    r = {}  # results dict
+    r = {} 
 
-    # ---- Input Extraction ----
+    # Input Extraction
     header_od_inch = params["header_od_inch"]
     branch_od_inch = params["branch_od_inch"]
     design_pressure_bar = params["design_pressure_bar"]
@@ -461,7 +466,7 @@ def run_calculation(params):
     nozzle_ext_wt_mm = params.get("nozzle_ext_wt_mm", 0)
     reinforcement_wt_mm = params["reinforcement_wt_mm"]
 
-    # ---- Derived / Lookup Values ----
+    # Derived / Lookup Values
     r["pressure_class"] = get_pressure_class(design_pressure_bar)
     r["header_od_mm"] = lookup_pipe_od_mm(header_od_inch)
     r["branch_od_mm"] = lookup_pipe_od_mm(branch_od_inch)
@@ -469,7 +474,6 @@ def run_calculation(params):
     if r["header_od_mm"] is None or r["branch_od_mm"] is None:
         return {"error": "Invalid pipe size selected. Please check Header and Branch OD."}
 
-    # Convert to imperial
     header_wt_in = header_wt_mm / 25.4
     flange_wt_in = flange_wt_mm / 25.4
     nozzle_tee_wt_in = nozzle_tee_wt_mm / 25.4
@@ -477,14 +481,13 @@ def run_calculation(params):
     reinforcement_wt_in = reinforcement_wt_mm / 25.4
     corrosion_allowance_in = corrosion_allowance_mm / 25.4
 
-    header_od_in = header_od_inch  # already inch
+    header_od_in = header_od_inch
     branch_od_in = branch_od_inch
 
     Dh_mm = r["header_od_mm"]
     Dh_in = Dh_mm / 25.4
     Db_lookup_mm = r["branch_od_mm"]
 
-    # SMYS values
     _, Sh_psi = get_smys(header_material)
     Sh_metric = get_smys(header_material)[0]
     _, Sf_psi = get_smys(flange_material)
@@ -500,7 +503,7 @@ def run_calculation(params):
     r["reinforcement_SMYS_metric"] = Sr_metric
     r["reinforcement_SMYS_psi"] = Sr_psi
 
-    # ---- PIPE CALCULATION (TEMPLATE L2 area) ----
+    # PIPE CALCULATION
     P_bar = design_pressure_bar
     P_psi = P_bar * 14.5
     F = design_factor_F
@@ -509,7 +512,6 @@ def run_calculation(params):
     Th_mm = header_wt_mm
     Th_in = header_wt_in
 
-    # Required wall thickness: t = P * OD / (2 * Sh * F * E * T)
     if Sh_psi > 0 and F > 0 and E > 0 and T > 0:
         t_required_in = P_psi * Dh_in / (2 * Sh_psi * F * E * T)
     else:
@@ -518,7 +520,6 @@ def run_calculation(params):
     r["t_required_mm"] = t_required_mm
     r["t_required_in"] = t_required_in
 
-    # Excess thickness in header
     if reinforcement_type == "Tam Semerli / Full Encirclement":
         excess_header_mm = 0
     elif Th_mm - t_required_mm - corrosion_allowance_mm < 0:
@@ -529,7 +530,6 @@ def run_calculation(params):
     r["excess_header_mm"] = excess_header_mm
     r["excess_header_in"] = excess_header_in
 
-    # Hoop stress
     if Th_in > 0:
         S_hoop_psi = P_psi * Dh_in / (2 * Th_in * 1)
     else:
@@ -539,25 +539,21 @@ def run_calculation(params):
 
     r["fitting_required"] = reinforcement_type
 
-    # ---- HOT-TAP FITTING CALCULATION ----
-    # Branch OD (Db) - depends on fitting type
+    # HOT-TAP FITTING CALCULATION
     nozzle_nd_id = get_nozzle_hole_id(branch_od_inch, fitting_type)
     if fitting_type == "Hot Tap":
         Db_mm = Db_lookup_mm
     else:
-        # Linestop: max of nozzle_nd_id + 2*nozzle_wt + 3 vs Db_lookup_mm
         Db_mm = max(nozzle_nd_id + 2 * nozzle_tee_wt_mm + 3, Db_lookup_mm)
 
     Db_in = Db_mm / 25.4
     r["Db_mm"] = Db_mm
     r["Db_in"] = Db_in
 
-    # Pipe Net WT (Th - CA)
     Th_net_mm = Th_mm - corrosion_allowance_mm
     Th_net_in = Th_net_mm / 25.4
     r["Th_net_mm"] = Th_net_mm
 
-    # Branch Nominal Hole Diameter (db)
     if fitting_type == "Hot Tap":
         db_mm = Db_lookup_mm - 2 * nozzle_tee_wt_mm
     else:
@@ -566,23 +562,20 @@ def run_calculation(params):
     r["db_mm"] = db_mm
     r["db_in"] = db_in
 
-    # Required WT for header: th = P*Dh/(2*Sh*F*E*T)
-    th_in = t_required_in  # same as t_required
+    th_in = t_required_in
     th_mm = t_required_mm
     r["th_mm"] = th_mm
 
-    # Area to be reinforced: Ar = db * th
     Ar_in2 = db_in * th_in
     Ar_mm2 = Ar_in2 * 25.4 ** 2
     r["Ar_mm2"] = Ar_mm2
     r["Ar_in2"] = Ar_in2
 
-    # ---- Reinforcement Material ----
     r["reinf_material"] = reinforcement_material
     r["reinf_SMYS_metric"] = Sr_metric
     r["reinf_SMYS_psi"] = Sr_psi
 
-    # ---- A1: Header area ----
+    # A1: Header area
     A1_excess_in = excess_header_in
     A1_ND_in = db_in
     if reinforcement_type == "Tam Semerli / Full Encirclement":
@@ -595,7 +588,7 @@ def run_calculation(params):
     r["A1_mm2"] = A1_mm2
     r["A1_in2"] = A1_in2
 
-    # ---- A2: Nozzle area ----
+    # A2: Nozzle area
     if nozzle_type == "Tee+Nipple":
         Tb_mm = nozzle_ext_wt_mm
         Sb_calc_psi = Sext_psi
@@ -613,12 +606,10 @@ def run_calculation(params):
     Tr_in = Tr_mm / 25.4
     r["Tr_mm"] = Tr_mm
 
-    # Height Lb = min(2.5*Th, 2.5*Tb_net + Tr)
     Lb_mm = min(2.5 * Th_mm, 2.5 * Tb_net_mm + Tr_mm)
     Lb_in = Lb_mm / 25.4
     r["Lb_mm"] = Lb_mm
 
-    # tb = P*Db/(2*Sb_metric*148.5*F*E*T)
     if Sb_calc_metric > 0:
         tb_in = P_psi * Db_in / 2 / Sb_calc_metric / 148.5 / F / E / T
     else:
@@ -626,18 +617,15 @@ def run_calculation(params):
     tb_mm = tb_in * 25.4
     r["tb_mm"] = tb_mm
 
-    # Excess thickness in nozzle
     excess_nozzle_in = Tb_net_in - tb_in
     excess_nozzle_mm = excess_nozzle_in * 25.4
     r["excess_nozzle_mm"] = excess_nozzle_mm
 
-    # A2 = 2 * (Tb - tb) * Lb
     A2_in2 = Lb_in * excess_nozzle_in * 2
     A2_mm2 = A2_in2 * 25.4 ** 2
     r["A2_mm2"] = A2_mm2
     r["A2_in2"] = A2_in2
 
-    # A2' = A2 * material ratio
     if Sb_calc_metric > 0 and Sh_metric > 0:
         mat_ratio_A2 = Sb_calc_metric / Sh_metric
     else:
@@ -648,7 +636,7 @@ def run_calculation(params):
     A2_prime_mm2 = A2_prime_in2 * 25.4 ** 2
     r["A2_prime_mm2"] = A2_prime_mm2
 
-    # ---- A3: Reinforcement Pad / Sleeve area ----
+    # A3: Reinforcement Pad / Sleeve area
     Lr_mm = 2 * db_mm
     Lr_in = Lr_mm / 25.4
     r["Lr_mm"] = Lr_mm
@@ -661,7 +649,6 @@ def run_calculation(params):
     A3_mm2 = A3_in2 * 25.4 ** 2
     r["A3_mm2"] = A3_mm2
 
-    # A3' adjusted for material ratio
     if Sr_metric > 0 and Sh_metric > 0:
         mat_ratio_A3 = Sr_metric / Sh_metric
     elif Sr_psi > 0 and Sh_psi > 0:
@@ -677,20 +664,19 @@ def run_calculation(params):
     A3_prime_mm2 = A3_prime_in2 * 25.4 ** 2
     r["A3_prime_mm2"] = A3_prime_mm2
 
-    # ---- CONTROL: Ar - (A1 + A2' + A3') ----
+    # CONTROL
     P44 = 0
     control_in2 = Ar_in2 - A1_in2 - A2_prime_in2 - A3_prime_in2 - P44
     control_mm2 = control_in2 * 25.4 ** 2
     r["control_mm2"] = control_mm2
     r["control_in2"] = control_in2
 
-    # Result
     if control_in2 < 0:
         r["result"] = "UYGUN/SUITABLE!"
     else:
         r["result"] = "UYGUN DEGIL/NOT SUITABLE!"
 
-    # ---- FLANGE CHECK ----
+    # FLANGE CHECK
     if Sf_psi > 0 and F > 0 and E > 0 and T > 0:
         flange_req = P_psi * Db_in / 2 / Sf_psi / F / E / T
     else:
@@ -698,16 +684,14 @@ def run_calculation(params):
     flange_check = flange_wt_in - corrosion_allowance_in > flange_req
     r["flange_check"] = "OK" if flange_check else "NOT OK"
 
-    # ---- NOZZLE CHECK ----
     r["nozzle_check"] = "OK" if control_mm2 < 0 else "NOT OK"
 
-    # ---- WEIGHT CALCULATION ----
+    # WEIGHT CALCULATION
     pc = r["pressure_class"]
     wn_flange_kg = get_flange_wn_kg(pc, branch_od_inch)
     bld_flange_kg = get_flange_bld_kg(pc, branch_od_inch)
     nozzle_kg = get_nozzle_weight_kg(branch_od_inch)
 
-    # Reinforcement weight
     if reinforcement_type == "Nipel / Nipple":
         reinf_kg = 0
     elif reinforcement_type == "Yaka Takviyeli / Pad Reinforcement":
@@ -718,7 +702,6 @@ def run_calculation(params):
     else:
         reinf_kg = 0
 
-    # Plug weight
     plug_height = get_plug_height(completion_type, branch_od_inch)
     if completion_type == "Tapasiz / No Plug":
         plug_kg = 0
@@ -734,7 +717,7 @@ def run_calculation(params):
     r["plug_kg"] = plug_kg
     r["total_weight_kg"] = total_weight
 
-    # ---- PLUG CALCULATION ----
+    # PLUG CALCULATION
     plug_Re = 355  # MPa (C45E)
     plug_C = 0.3
     plug_F_factor = F
@@ -828,15 +811,38 @@ st.markdown("---")
 
 # ---- RUN CALCULATION ----
 if st.button("🔨 Calculate", type="primary", use_container_width=True):
-    # Calculate and store the results in Streamlit's Session State
+    params = {
+        "header_od_inch": header_od_inch,
+        "branch_od_inch": branch_od_inch,
+        "design_pressure_bar": design_pressure,
+        "design_factor_F": design_factor_F,
+        "design_factor_E": design_factor_E,
+        "design_factor_T": design_factor_T,
+        "header_material": header_material,
+        "flange_material": flange_material,
+        "nozzle_tee_material": nozzle_tee_material,
+        "nozzle_ext_material": nozzle_ext_material_name,
+        "reinforcement_material": reinforcement_material,
+        "corrosion_allowance_mm": corrosion_allowance,
+        "reinforcement_type": reinforcement_type,
+        "fitting_type": fitting_type,
+        "nozzle_type": nozzle_type,
+        "completion_type": completion_type,
+        "guide_bar": guide_bar,
+        "header_wt_mm": header_wt,
+        "flange_wt_mm": flange_wt,
+        "nozzle_tee_wt_mm": nozzle_tee_wt,
+        "nozzle_ext_wt_mm": nozzle_ext_wt,
+        "reinforcement_wt_mm": reinforcement_wt,
+    }
+
+    # Store calculation in session state so download button doesn't wipe it
     st.session_state['calc_results'] = run_calculation(params)
     st.session_state['calc_params'] = params
     st.session_state['is_calculated'] = True
 
-# Only display results if a calculation has been run and stored in the session
+
 if st.session_state.get('is_calculated', False):
-    
-    # Retrieve the stored data
     results = st.session_state['calc_results']
     saved_params = st.session_state['calc_params']
 
@@ -951,8 +957,9 @@ if st.session_state.get('is_calculated', False):
         # ---- PDF REPORT GENERATION ----
         st.markdown("### 📄 Export Report")
         
-        # Package the project info from the sidebar
+        # 1. Package the project info, including the dynamic date
         project_data = {
+            "Date": datetime.date.today().strftime("%d %B %Y"),  # e.g., 09 March 2026
             "Project Name": project_name,
             "Location": location,
             "Client": client,
@@ -962,10 +969,10 @@ if st.session_state.get('is_calculated', False):
             "Specification": specification
         }
         
-        # Generate the PDF bytes (passing the saved_params instead of un-submitted UI params)
+        # 2. Generate the PDF bytes
         pdf_bytes = create_pdf_report(project_data, saved_params, results)
         
-        # Display the download button
+        # 3. Display the download button
         st.download_button(
             label="⬇️ Download PDF Report",
             data=pdf_bytes,
