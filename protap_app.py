@@ -229,7 +229,7 @@ PASSIVE_PLUG_HEIGHTS = {
   32: 150, 34: 150, 36: 150, 38: 140, 40: 150,
 }
 
-STEEL_DENSITY = 7900  # kg/m3
+ STEEL_DENSITY = 7900 # kg/m3
 
 
 # ============================================================
@@ -306,7 +306,7 @@ def run_calculation(params):
   Replicate the TEMPLATE sheet calculations.
   Returns a dict of all intermediate and final results.
   """
-  r = {}  # results dict
+  r = {}  # results dict
 
   # ---- Input Extraction ----
   header_od_inch = params["header_od_inch"]
@@ -351,7 +351,7 @@ def run_calculation(params):
   reinforcement_wt_in = reinforcement_wt_mm / 25.4
   corrosion_allowance_in = corrosion_allowance_mm / 25.4
 
-  header_od_in = header_od_inch  # already inch
+  header_od_in = header_od_inch  # already inch
   branch_od_in = branch_od_inch
 
   Dh_mm = r["header_od_mm"]
@@ -441,7 +441,7 @@ def run_calculation(params):
   r["db_in"] = db_in
 
   # Required WT for header: th = P*Dh/(2*Sh*F*E*T)
-  th_in = t_required_in  # same as t_required
+  th_in = t_required_in  # same as t_required
   th_mm = t_required_mm
   r["th_mm"] = th_mm
 
@@ -609,10 +609,10 @@ def run_calculation(params):
   r["total_weight_kg"] = total_weight
 
   # ---- PLUG CALCULATION ----
-  plug_Re = 355  # MPa (C45E)
+  plug_Re = 355  # MPa (C45E)
   plug_C = 0.3
   plug_F_factor = F
-  plug_S_allowable = plug_Re * plug_F_factor  # MPa
+  plug_S_allowable = plug_Re * plug_F_factor  # MPa
   if plug_S_allowable > 0:
     plug_min_thickness = db_mm * math.sqrt(plug_C * P_bar / 10 / plug_S_allowable / F)
   else:
@@ -684,7 +684,7 @@ with col3:
     st.text("Nozzle Extension: N/A")
 
   reinforcement_material = st.selectbox("Reinforcement Material", all_pipe_materials,
-                       index=all_pipe_materials.index("EN 10028-3 P355NL1 (16 < t ≤ 40mm)"))
+                       index=all_pipe_materials.index("EN 10028-3 P355NL1 (16 < t ≤ 40mm)"))
   reinforcement_wt = st.number_input("Reinforcement WT (mm)", value=28.5, min_value=0.1, step=0.1)
 
   corrosion_allowance = st.number_input("Corrosion Allowance (mm)", value=0.0, min_value=0.0, step=0.1)
@@ -760,8 +760,8 @@ if st.button("🔨 Calculate", type="primary", use_container_width=True):
       st.metric("Reinforcement Area (A3')", f"{results['A3_prime_mm2']:.2f} mm²")
       control_val = results['control_mm2']
       st.metric("Ar - (A1+A2'+A3')", f"{control_val:.2f} mm²",
-             delta=f"{'Sufficient' if control_val < 0 else 'Insufficient'}",
-             delta_color="normal" if control_val < 0 else "inverse")
+             delta=f"{'Sufficient' if control_val < 0 else 'Insufficient'}",
+             delta_color="normal" if control_val < 0 else "inverse")
 
     with r3:
       st.subheader("⚖️ Weight Estimate")
