@@ -294,21 +294,19 @@ def get_plug_height(completion_type, branch_inch):
 class PDFReport(FPDF):
     def header(self):
         """This runs automatically every time a new page is created."""
-        # Force Python to look in the exact folder where app.py is running
         current_dir = os.path.dirname(os.path.abspath(__file__))
         logo_path = os.path.join(current_dir, "logo.png")
         
         if os.path.exists(logo_path):
-            # Place the logo at the top left
-            self.image(logo_path, x=10, y=8, w=40)
+            # FIX 1: Logo scaled to full usable width (190mm = page width minus margins)
+            # The logo is 2000x279px (7:1 ratio), so at w=190 it will be ~26.5mm tall
+            self.image(logo_path, x=10, y=5, w=190)
 
     def footer(self):
         """This runs automatically at the bottom of every page."""
-        # Position cursor 15 mm from the bottom
         self.set_y(-15)
         self.set_font("Helvetica", style="I", size=8)
-        self.set_text_color(128, 128, 128) # Grey text
-        # Print the certification and page numbers
+        self.set_text_color(128, 128, 128)
         self.multi_cell(0, 4, f"We hereby certify that these calculations are based on the specification referenced above and conform to the standards referenced therein (ASME B31.8). | Page {self.page_no()}", align="C")
 
 
@@ -316,11 +314,17 @@ def create_pdf_report(project_info, params, results):
     """Generates a detailed ASME B31.8 compliant PDF report with formulas."""
     pdf = PDFReport()
     
-    # 1. FIX: Set Auto Page Break and strict Top Margin so text never hits the logo
+    # FIX: Increase top margin to 35mm to clear the larger logo (was 30)
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_margins(left=10, top=30, right=10) 
+    pdf.set_margins(left=10, top=35, right=10) 
     
     pdf.add_page()
+
+    # Column widths for the 3-column row layout
+    COL_LABEL = 55   # Label column width (mm)
+    COL_VALUE = 45   # Value column width (mm)
+    ROW_H = 6        # Standard row height (mm)
+    # Formula column gets the remainder: 190 - 55 - 45 = 90mm
     
     def section_title(title):
         pdf.ln(3)
@@ -330,18 +334,25 @@ def create_pdf_report(project_info, params, results):
         pdf.ln(2)
 
     def row(label, value, formula=""):
+        """Print a single data row: Label | Value | Formula (all on same line)."""
         pdf.set_font("Helvetica", style="B", size=10)
-        # Allocate 50mm for label, 40mm for value
-        pdf.cell(50, 6, label, border=0)
+        pdf.cell(COL_LABEL, ROW_H, label, border=0)
         pdf.set_font("Helvetica", style="", size=10)
-        pdf.cell(40, 6, str(value), border=0)
+        pdf.cell(COL_VALUE, ROW_H, str(value), border=0)
         
         if formula:
-            pdf.set_font("Courier", style="I", size=9)
-            # 2. FIX: Use multi_cell to automatically text-wrap long formulas/material names
-            pdf.multi_cell(0, 6, str(formula), border=0, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", style="I", size=9)
+            # FIX 2: Use cell (not multi_cell) to keep formula on the SAME row.
+            # Truncate gracefully if too long — the formula column is ~90mm.
+            pdf.cell(0, ROW_H, str(formula), border=0, new_x="LMARGIN", new_y="NEXT")
         else:
-            pdf.ln(6)
+            pdf.ln(ROW_H)
+
+    def formula_line(text):
+        """Print a standalone formula/description line, properly resetting cursor."""
+        pdf.set_font("Helvetica", style="I", size=9)
+        # FIX 3: Always reset cursor to left margin after multi_cell
+        pdf.multi_cell(0, 5, text, new_x="LMARGIN", new_y="NEXT")
 
     # --- Header (Main Title) ---
     pdf.set_font("Helvetica", style="B", size=16)
@@ -354,12 +365,12 @@ def create_pdf_report(project_info, params, results):
     pdf.ln(5)
     pdf.set_font("Helvetica", style="B", size=14)
     if results['control_in2'] < 0:
-        pdf.set_text_color(0, 128, 0) # Green
+        pdf.set_text_color(0, 128, 0)
         pdf.cell(0, 10, f"OVERALL RESULT: {results['result']}", new_x="LMARGIN", new_y="NEXT", align="C", border=1)
     else:
-        pdf.set_text_color(255, 0, 0) # Red
+        pdf.set_text_color(255, 0, 0)
         pdf.cell(0, 10, f"OVERALL RESULT: {results['result']}", new_x="LMARGIN", new_y="NEXT", align="C", border=1)
-    pdf.set_text_color(0, 0, 0) # Reset to black
+    pdf.set_text_color(0, 0, 0)
 
     # --- 1. Project Information ---
     section_title("1. Project Information")
@@ -386,45 +397,36 @@ def create_pdf_report(project_info, params, results):
 
     # --- 4. Required Thickness Calculations ---
     section_title("4. Required Wall Thickness Calculations")
-    pdf.set_font("Helvetica", style="I", size=9)
-    pdf.multi_cell(0, 5, "ASME B31.8 Formula: t = (P * D) / (2 * S * F * E * T)")
+    formula_line("ASME B31.8 Formula: t = (P * D) / (2 * S * F * E * T)")
     pdf.ln(2)
-    row("Req. Header WT (th):", f"{results['t_required_mm']:.2f} mm", "th = P * Dh / (2 * Sh * F * E * T)")
+    row("Req. Header WT (th):", f"{results['t_required_mm']:.2f} mm", "th = P*Dh / (2*Sh*F*E*T)")
     row("Actual Header WT (Th):", f"{params['header_wt_mm']:.2f} mm")
-    row("Req. Branch WT (tb):", f"{results['tb_mm']:.2f} mm", "tb = P * Db / (2 * Sb * F * E * T)")
+    row("Req. Branch WT (tb):", f"{results['tb_mm']:.2f} mm", "tb = P*Db / (2*Sb*F*E*T)")
     row("Actual Branch WT (Tb):", f"{params['nozzle_tee_wt_mm']:.2f} mm")
 
     # --- 5. Area Replacement Method (ASME B31.8) ---
     section_title("5. Area Replacement (ASME B31.8)")
     row("Req. Reinforcement (Ar):", f"{results['Ar_mm2']:.2f} mm2", "Ar = d * th")
     
-    # A1
+    # A1 — formula on its own line, then data row immediately below
     pdf.ln(2)
-    pdf.set_font("Helvetica", style="I", size=9)
-    pdf.multi_cell(0, 5, "Available Area in Header (A1) = (Th - th - c) * d")
+    formula_line("Available Area in Header (A1) = (Th - th - c) * d")
     row("Header Area (A1):", f"{results['A1_mm2']:.2f} mm2")
     
     # A2
     pdf.ln(2)
-    pdf.set_font("Helvetica", style="I", size=9)
-    pdf.multi_cell(0, 5, "Available Area in Branch (A2') = 2 * Lb * (Tb - tb - c) * (Sb / Sh)")
+    formula_line("Available Area in Branch (A2') = 2 * Lb * (Tb - tb - c) * (Sb / Sh)")
     row("Branch Area (A2'):", f"{results['A2_prime_mm2']:.2f} mm2")
     
     # A3
     pdf.ln(2)
-    pdf.set_font("Helvetica", style="I", size=9)
-    pdf.multi_cell(0, 5, "Available Area in Reinforcement (A3') = Pad Area * (Sr / Sh)")
+    formula_line("Available Area in Reinforcement (A3') = Pad Area * (Sr / Sh)")
     row("Reinf. Area (A3'):", f"{results['A3_prime_mm2']:.2f} mm2")
     
     # Check
     pdf.ln(3)
-    pdf.set_font("Helvetica", style="B", size=10)
-    pdf.cell(50, 6, "Total Available:", border=0)
     total_avail = results['A1_mm2'] + results['A2_prime_mm2'] + results['A3_prime_mm2']
-    pdf.cell(40, 6, f"{total_avail:.2f} mm2", border=0)
-    
-    pdf.set_font("Courier", style="I", size=9)
-    pdf.multi_cell(0, 6, "(A1 + A2' + A3')", border=0, new_x="LMARGIN", new_y="NEXT")
+    row("Total Available:", f"{total_avail:.2f} mm2", "(A1 + A2' + A3')")
 
     pdf.ln(2)
     row("Control (Ar - Total):", f"{results['control_mm2']:.2f} mm2", "Must be <= 0")
@@ -435,7 +437,7 @@ def create_pdf_report(project_info, params, results):
     row("Plug Shear Allowable:", f"{results['plug_S_allowable']:.1f} MPa")
     row("Min Plug Thickness:", f"{results['plug_min_thickness_mm']:.2f} mm")
     pdf.ln(2)
-    row("Est. Total Weight:", f"{results['total_weight_kg']:.2f} kg", "Includes flanges, nozzle, plug, and reinf.")
+    row("Est. Total Weight:", f"{results['total_weight_kg']:.2f} kg", "Includes flanges, nozzle, plug, reinf.")
 
     return bytes(pdf.output())
 
