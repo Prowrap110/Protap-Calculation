@@ -521,4 +521,466 @@ def run_calculation(params):
     Th_in = header_wt_in
 
     if Sh_psi > 0 and F > 0 and E > 0 and T > 0:
-        t_required_in = P_psi * Dh_in
+        t_required_in = P_psi * Dh_in / (2 * Sh_psi * F * E * T)
+    else:
+        t_required_in = 0
+    t_required_mm = t_required_in * 25.4
+    r["t_required_mm"] = t_required_mm
+    r["t_required_in"] = t_required_in
+
+    if reinforcement_type == "Tam Semerli / Full Encirclement":
+        excess_header_mm = 0
+    elif Th_mm - t_required_mm - corrosion_allowance_mm < 0:
+        excess_header_mm = 0
+    else:
+        excess_header_mm = Th_mm - t_required_mm - corrosion_allowance_mm
+    excess_header_in = excess_header_mm / 25.4
+    r["excess_header_mm"] = excess_header_mm
+    r["excess_header_in"] = excess_header_in
+
+    if Th_in > 0:
+        S_hoop_psi = P_psi * Dh_in / (2 * Th_in * 1)
+    else:
+        S_hoop_psi = 0
+    r["hoop_stress_psi"] = S_hoop_psi
+    r["S_over_Sh"] = S_hoop_psi / Sh_psi if Sh_psi > 0 else 0
+
+    r["fitting_required"] = reinforcement_type
+
+    # HOT-TAP FITTING CALCULATION
+    nozzle_nd_id = get_nozzle_hole_id(branch_od_inch, fitting_type)
+    if fitting_type == "Hot Tap":
+        Db_mm = Db_lookup_mm
+    else:
+        Db_mm = max(nozzle_nd_id + 2 * nozzle_tee_wt_mm + 3, Db_lookup_mm)
+
+    Db_in = Db_mm / 25.4
+    r["Db_mm"] = Db_mm
+    r["Db_in"] = Db_in
+
+    Th_net_mm = Th_mm - corrosion_allowance_mm
+    Th_net_in = Th_net_mm / 25.4
+    r["Th_net_mm"] = Th_net_mm
+
+    if fitting_type == "Hot Tap":
+        db_mm = Db_lookup_mm - 2 * nozzle_tee_wt_mm
+    else:
+        db_mm = max(nozzle_nd_id, Db_lookup_mm - 2 * nozzle_tee_wt_mm)
+    db_in = db_mm / 25.4
+    r["db_mm"] = db_mm
+    r["db_in"] = db_in
+
+    th_in = t_required_in
+    th_mm = t_required_mm
+    r["th_mm"] = th_mm
+
+    Ar_in2 = db_in * th_in
+    Ar_mm2 = Ar_in2 * 25.4 ** 2
+    r["Ar_mm2"] = Ar_mm2
+    r["Ar_in2"] = Ar_in2
+
+    r["reinf_material"] = reinforcement_material
+    r["reinf_SMYS_metric"] = Sr_metric
+    r["reinf_SMYS_psi"] = Sr_psi
+
+    # A1: Header area
+    A1_excess_in = excess_header_in
+    A1_ND_in = db_in
+    if reinforcement_type == "Tam Semerli / Full Encirclement":
+        A1_in2 = 0
+    elif A1_excess_in < 0:
+        A1_in2 = 0
+    else:
+        A1_in2 = A1_ND_in * A1_excess_in
+    A1_mm2 = A1_in2 * 25.4 ** 2
+    r["A1_mm2"] = A1_mm2
+    r["A1_in2"] = A1_in2
+
+    # A2: Nozzle area
+    if nozzle_type == "Tee+Nipple":
+        Tb_mm = nozzle_ext_wt_mm
+        Sb_calc_psi = Sext_psi
+        Sb_calc_metric = Sext_metric
+    else:
+        Tb_mm = nozzle_tee_wt_mm
+        Sb_calc_psi = Sb_psi
+        Sb_calc_metric = Sb_metric
+
+    Tb_net_mm = Tb_mm - corrosion_allowance_mm
+    Tb_net_in = Tb_net_mm / 25.4
+    r["Tb_net_mm"] = Tb_net_mm
+
+    Tr_mm = reinforcement_wt_mm - corrosion_allowance_mm
+    Tr_in = Tr_mm / 25.4
+    r["Tr_mm"] = Tr_mm
+
+    Lb_mm = min(2.5 * Th_mm, 2.5 * Tb_net_mm + Tr_mm)
+    Lb_in = Lb_mm / 25.4
+    r["Lb_mm"] = Lb_mm
+
+    if Sb_calc_metric > 0:
+        tb_in = P_psi * Db_in / 2 / Sb_calc_metric / 148.5 / F / E / T
+    else:
+        tb_in = 0
+    tb_mm = tb_in * 25.4
+    r["tb_mm"] = tb_mm
+
+    excess_nozzle_in = Tb_net_in - tb_in
+    excess_nozzle_mm = excess_nozzle_in * 25.4
+    r["excess_nozzle_mm"] = excess_nozzle_mm
+
+    A2_in2 = Lb_in * excess_nozzle_in * 2
+    A2_mm2 = A2_in2 * 25.4 ** 2
+    r["A2_mm2"] = A2_mm2
+    r["A2_in2"] = A2_in2
+
+    if Sb_calc_metric > 0 and Sh_metric > 0:
+        mat_ratio_A2 = Sb_calc_metric / Sh_metric
+    else:
+        mat_ratio_A2 = 1
+    if mat_ratio_A2 >= 1:
+        mat_ratio_A2 = 1
+    A2_prime_in2 = A2_in2 * mat_ratio_A2
+    A2_prime_mm2 = A2_prime_in2 * 25.4 ** 2
+    r["A2_prime_mm2"] = A2_prime_mm2
+
+    # A3: Reinforcement Pad / Sleeve area
+    Lr_mm = 2 * db_mm
+    Lr_in = Lr_mm / 25.4
+    r["Lr_mm"] = Lr_mm
+
+    if reinforcement_type == "Tam Semerli / Full Encirclement":
+        A3_in2 = (Tr_in - t_required_in) * (Lr_in - db_in)
+    else:
+        A3_in2 = Tr_in * (Lr_in - db_in) + (Lr_in - db_in) * excess_header_in
+
+    A3_mm2 = A3_in2 * 25.4 ** 2
+    r["A3_mm2"] = A3_mm2
+
+    if Sr_metric > 0 and Sh_metric > 0:
+        mat_ratio_A3 = Sr_metric / Sh_metric
+    elif Sr_psi > 0 and Sh_psi > 0:
+        mat_ratio_A3 = Sr_psi / Sh_psi
+    else:
+        mat_ratio_A3 = 1
+    if mat_ratio_A3 > 1:
+        mat_ratio_A3 = 1
+    if reinforcement_type != "Nipel / Nipple":
+        A3_prime_in2 = A3_in2 * mat_ratio_A3
+    else:
+        A3_prime_in2 = 0
+    A3_prime_mm2 = A3_prime_in2 * 25.4 ** 2
+    r["A3_prime_mm2"] = A3_prime_mm2
+
+    # CONTROL
+    P44 = 0
+    control_in2 = Ar_in2 - A1_in2 - A2_prime_in2 - A3_prime_in2 - P44
+    control_mm2 = control_in2 * 25.4 ** 2
+    r["control_mm2"] = control_mm2
+    r["control_in2"] = control_in2
+
+    if control_in2 < 0:
+        r["result"] = "UYGUN/SUITABLE!"
+    else:
+        r["result"] = "UYGUN DEGIL/NOT SUITABLE!"
+
+    # FLANGE CHECK
+    if Sf_psi > 0 and F > 0 and E > 0 and T > 0:
+        flange_req = P_psi * Db_in / 2 / Sf_psi / F / E / T
+    else:
+        flange_req = 0
+    flange_check = flange_wt_in - corrosion_allowance_in > flange_req
+    r["flange_check"] = "OK" if flange_check else "NOT OK"
+
+    r["nozzle_check"] = "OK" if control_mm2 < 0 else "NOT OK"
+
+    # WEIGHT CALCULATION
+    pc = r["pressure_class"]
+    wn_flange_kg = get_flange_wn_kg(pc, branch_od_inch)
+    bld_flange_kg = get_flange_bld_kg(pc, branch_od_inch)
+    nozzle_kg = get_nozzle_weight_kg(branch_od_inch)
+
+    if reinforcement_type == "Nipel / Nipple":
+        reinf_kg = 0
+    elif reinforcement_type == "Yaka Takviyeli / Pad Reinforcement":
+        reinf_kg = math.pi * reinforcement_wt_mm * (Lr_mm ** 2 - Db_mm ** 2) * STEEL_DENSITY / 1e9 / 4
+    elif reinforcement_type == "Tam Semerli / Full Encirclement":
+        reinf_kg = (math.pi * reinforcement_wt_mm * Lr_mm * (Dh_mm + reinforcement_wt_mm) * STEEL_DENSITY / 1e9
+            - math.pi * reinforcement_wt_mm * Db_mm ** 2 / 4 / 1e9)
+    else:
+        reinf_kg = 0
+
+    plug_height = get_plug_height(completion_type, branch_od_inch)
+    if completion_type == "Tapasiz / No Plug":
+        plug_kg = 0
+    else:
+        plug_kg = math.pi * db_mm ** 2 * plug_height * STEEL_DENSITY / 1e9 / 4
+
+    total_weight = wn_flange_kg + bld_flange_kg + nozzle_kg + reinf_kg + plug_kg
+
+    r["wn_flange_kg"] = wn_flange_kg
+    r["bld_flange_kg"] = bld_flange_kg
+    r["nozzle_kg"] = nozzle_kg
+    r["reinf_kg"] = reinf_kg
+    r["plug_kg"] = plug_kg
+    r["total_weight_kg"] = total_weight
+
+    # PLUG CALCULATION
+    plug_Re = 355  # MPa (C45E)
+    plug_C = 0.3
+    plug_F_factor = F
+    plug_S_allowable = plug_Re * plug_F_factor  # MPa
+    if plug_S_allowable > 0:
+        plug_min_thickness = db_mm * math.sqrt(plug_C * P_bar / 10 / plug_S_allowable / F)
+    else:
+        plug_min_thickness = 0
+    r["plug_min_thickness_mm"] = plug_min_thickness
+    r["plug_S_allowable"] = plug_S_allowable
+
+    return r
+
+
+# ============================================================
+# STREAMLIT APP
+# ============================================================
+
+st.set_page_config(page_title="PROTAP Calculation Tool", layout="wide")
+st.title("🔧 PROTAP Hot-Tap / Linestop Calculation")
+st.markdown("**ASME B31.8 - Branch Connection Reinforcement Calculation**")
+st.markdown("---")
+
+# ---- SIDEBAR: Project Info ----
+with st.sidebar:
+    st.header("📋 Project Information")
+    project_name = st.text_input("Sheet Name", value="25-425 PU SRB")
+    location = st.text_input("Location", value="SERBIA")
+    client = st.text_input("Client / Owner", value="EIC")
+    client_ref = st.text_input("Client Ref", value="")
+    protap_ref = st.text_input("PROTAP Ref", value="25-425 PU ROU")
+    standard = st.selectbox("Standard", STANDARDS, index=1)
+    specification = st.selectbox("Specification", [""] + SPECIFICATIONS)
+
+# ---- MAIN: Input Section ----
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.subheader("Pipeline Data")
+    available_sizes = sorted(PIPE_OD_LOOKUP.keys())
+    header_od_inch = st.selectbox("Header OD (inch)", available_sizes, index=available_sizes.index(32))
+    branch_od_inch = st.selectbox("Branch OD (inch)", available_sizes, index=available_sizes.index(20))
+    design_pressure = st.number_input("Design Pressure (bar)", value=63.0, min_value=0.1, step=1.0)
+    design_factor_F = st.number_input("Design Factor (F)", value=0.5, min_value=0.01, max_value=1.0, step=0.01)
+    design_factor_E = st.number_input("Design Factor (E)", value=1.0, min_value=0.01, max_value=1.0, step=0.01)
+    design_factor_T = st.number_input("Design Factor (T)", value=1.0, min_value=0.01, max_value=1.0, step=0.01)
+
+with col2:
+    st.subheader("Materials & Wall Thickness")
+    all_pipe_materials = list(PIPE_MATERIALS.keys())
+    all_flange_materials = list(FLANGE_MATERIALS.keys())
+
+    header_material = st.selectbox("Header Material", all_pipe_materials, index=all_pipe_materials.index("API 5L X60/L415NE"))
+    header_wt = st.number_input("Header WT (mm)", value=14.2, min_value=0.1, step=0.1)
+
+    flange_material = st.selectbox("Flange Material", all_flange_materials, index=0)
+    flange_wt = st.number_input("Flange WT (mm)", value=15.0, min_value=0.1, step=0.1)
+
+    nozzle_tee_material = st.selectbox("Nozzle / Tee Material (min)", all_pipe_materials,
+                     index=all_pipe_materials.index("EN 10028-3 P355NL1 (t <= 16mm)"))
+    nozzle_tee_wt = st.number_input("Nozzle / Tee WT (mm)", value=15.0, min_value=0.1, step=0.1)
+
+with col3:
+    st.subheader("Additional Parameters")
+    nozzle_type = st.selectbox("Nozzle Type", NOZZLE_TYPES, index=NOZZLE_TYPES.index("Straight"))
+
+    nozzle_ext_material_name = "N/A"
+    nozzle_ext_wt = 0.0
+    if nozzle_type == "Tee+Nipple":
+        nozzle_ext_material_name = st.selectbox("Nozzle Extension Material", all_pipe_materials, index=0)
+        nozzle_ext_wt = st.number_input("Nozzle Extension WT (mm)", value=0.0, min_value=0.0, step=0.1)
+    else:
+        st.text("Nozzle Extension: N/A")
+
+    reinforcement_material = st.selectbox("Reinforcement Material", all_pipe_materials,
+                       index=all_pipe_materials.index("EN 10028-3 P355NL1 (16 < t <= 40mm)"))
+    reinforcement_wt = st.number_input("Reinforcement WT (mm)", value=28.5, min_value=0.1, step=0.1)
+
+    corrosion_allowance = st.number_input("Corrosion Allowance (mm)", value=0.0, min_value=0.0, step=0.1)
+
+st.markdown("---")
+col_a, col_b = st.columns(2)
+with col_a:
+    reinforcement_type = st.selectbox("Reinforcement Type", REINFORCEMENT_TYPES, index=REINFORCEMENT_TYPES.index("Tam Semerli / Full Encirclement"))
+    fitting_type = st.selectbox("Fitting Type", FITTING_TYPES, index=0)
+with col_b:
+    completion_type = st.selectbox("Completion Type", COMPLETION_TYPES, index=COMPLETION_TYPES.index("Pasif Tapa / Passive Plug"))
+    guide_bar = st.selectbox("Guide Bar", GUIDEBAR_TYPES, index=0)
+
+st.markdown("---")
+
+# ---- RUN CALCULATION ----
+if st.button("🔨 Calculate", type="primary", use_container_width=True):
+    params = {
+        "header_od_inch": header_od_inch,
+        "branch_od_inch": branch_od_inch,
+        "design_pressure_bar": design_pressure,
+        "design_factor_F": design_factor_F,
+        "design_factor_E": design_factor_E,
+        "design_factor_T": design_factor_T,
+        "header_material": header_material,
+        "flange_material": flange_material,
+        "nozzle_tee_material": nozzle_tee_material,
+        "nozzle_ext_material": nozzle_ext_material_name,
+        "reinforcement_material": reinforcement_material,
+        "corrosion_allowance_mm": corrosion_allowance,
+        "reinforcement_type": reinforcement_type,
+        "fitting_type": fitting_type,
+        "nozzle_type": nozzle_type,
+        "completion_type": completion_type,
+        "guide_bar": guide_bar,
+        "header_wt_mm": header_wt,
+        "flange_wt_mm": flange_wt,
+        "nozzle_tee_wt_mm": nozzle_tee_wt,
+        "nozzle_ext_wt_mm": nozzle_ext_wt,
+        "reinforcement_wt_mm": reinforcement_wt,
+    }
+
+    st.session_state['calc_results'] = run_calculation(params)
+    st.session_state['calc_params'] = params
+    st.session_state['is_calculated'] = True
+
+
+if st.session_state.get('is_calculated', False):
+    results = st.session_state['calc_results']
+    saved_params = st.session_state['calc_params']
+
+    if "error" in results:
+        st.error(results["error"])
+    else:
+        # ---- RESULT BANNER ----
+        if results["result"] == "UYGUN/SUITABLE!":
+            st.success(f"## ✅ RESULT: {results['result']}")
+        else:
+            st.error(f"## ❌ RESULT: {results['result']}")
+
+        # ---- Detailed Results ----
+        st.markdown("---")
+        r1, r2, r3 = st.columns(3)
+
+        with r1:
+            st.subheader("📐 Pipe Calculation")
+            st.metric("Pressure Class", results["pressure_class"])
+            st.metric("Header OD", f"{results['header_od_mm']:.1f} mm")
+            st.metric("Branch OD (Db)", f"{results['Db_mm']:.1f} mm")
+            st.metric("Required WT (t)", f"{results['t_required_mm']:.2f} mm")
+            st.metric("Excess Header Thickness", f"{results['excess_header_mm']:.2f} mm")
+            st.metric("Hoop Stress (S)", f"{results['hoop_stress_psi']:.1f} psi")
+            st.metric("S / Sh", f"{results['S_over_Sh']:.4f}")
+
+        with r2:
+            st.subheader("🔩 Reinforcement Areas")
+            st.metric("Area to be Reinforced (Ar)", f"{results['Ar_mm2']:.2f} mm²")
+            st.metric("Header Area (A1)", f"{results['A1_mm2']:.2f} mm²")
+            st.metric("Nozzle Area (A2')", f"{results['A2_prime_mm2']:.2f} mm²")
+            st.metric("Reinforcement Area (A3')", f"{results['A3_prime_mm2']:.2f} mm²")
+            control_val = results['control_mm2']
+            st.metric("Ar - (A1+A2'+A3')", f"{control_val:.2f} mm²",
+                   delta=f"{'Sufficient' if control_val < 0 else 'Insufficient'}",
+                   delta_color="normal" if control_val < 0 else "inverse")
+
+        with r3:
+            st.subheader("⚖️ Weight Estimate")
+            st.metric("WN Flange", f"{results['wn_flange_kg']:.2f} kg")
+            st.metric("BL Flange", f"{results['bld_flange_kg']:.2f} kg")
+            st.metric("Nozzle", f"{results['nozzle_kg']:.3f} kg")
+            st.metric("Reinforcement", f"{results['reinf_kg']:.2f} kg")
+            st.metric("Plug", f"{results['plug_kg']:.2f} kg")
+            st.metric("**TOTAL WEIGHT**", f"{results['total_weight_kg']:.2f} kg")
+
+        st.markdown("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("🔍 Additional Checks")
+            fc = results["flange_check"]
+            nc = results["nozzle_check"]
+            if fc == "OK":
+                st.success(f"Flange Check: **{fc}**")
+            else:
+                st.error(f"Flange Check: **{fc}**")
+            if nc == "OK":
+                st.success(f"Nozzle Check: **{nc}**")
+            else:
+                st.error(f"Nozzle Check: **{nc}**")
+
+        with c2:
+            st.subheader("🔩 Plug Data")
+            st.write(f"Plug Material: **C45E**")
+            st.write(f"Allowable Shear (S): **{results['plug_S_allowable']:.1f} MPa**")
+            st.write(f"Min Plug Thickness: **{results['plug_min_thickness_mm']:.2f} mm**")
+            st.write(f"Nominal Hole Diameter (db): **{results['db_mm']:.1f} mm**")
+            st.write(f"Reinforcement Length (Lr): **{results['Lr_mm']:.1f} mm**")
+
+        # ---- Intermediate Calculation Details (Expandable) ----
+        with st.expander("📊 Show All Intermediate Values"):
+            st.json({
+                "Pressure (bar)": saved_params["design_pressure_bar"],
+                "Pressure (psi)": saved_params["design_pressure_bar"] * 14.5,
+                "Header OD (mm)": results["header_od_mm"],
+                "Header OD (in)": results["header_od_mm"] / 25.4,
+                "Branch OD Db (mm)": results["Db_mm"],
+                "Branch OD Db (in)": results["Db_in"],
+                "Nominal Hole db (mm)": results["db_mm"],
+                "Nominal Hole db (in)": results["db_in"],
+                "Required WT t (mm)": results["t_required_mm"],
+                "Required WT t (in)": results["t_required_in"],
+                "Excess Header (mm)": results["excess_header_mm"],
+                "Th net (mm)": results["Th_net_mm"],
+                "Tb net (mm)": results["Tb_net_mm"],
+                "Tr (mm)": results["Tr_mm"],
+                "Lb (mm)": results["Lb_mm"],
+                "tb (mm)": results["tb_mm"],
+                "Excess Nozzle (mm)": results["excess_nozzle_mm"],
+                "Ar (mm2)": results["Ar_mm2"],
+                "A1 (mm2)": results["A1_mm2"],
+                "A2 (mm2)": results["A2_mm2"],
+                "A2' (mm2)": results["A2_prime_mm2"],
+                "A3 (mm2)": results["A3_mm2"],
+                "A3' (mm2)": results["A3_prime_mm2"],
+                "Control Ar-(A1+A2'+A3') (mm2)": results["control_mm2"],
+                "Lr (mm)": results["Lr_mm"],
+                "Header SMYS (MPa)": results["header_SMYS_metric"],
+                "Header SMYS (psi)": results["header_SMYS_psi"],
+                "Nozzle SMYS (MPa)": results["nozzle_SMYS_metric"],
+                "Nozzle SMYS (psi)": results["nozzle_SMYS_psi"],
+                "Reinforcement SMYS (MPa)": results["reinforcement_SMYS_metric"],
+                "Reinforcement SMYS (psi)": results["reinforcement_SMYS_psi"],
+                "Hoop Stress (psi)": results["hoop_stress_psi"],
+                "S/Sh": results["S_over_Sh"],
+            })
+
+        st.markdown("---")
+        st.caption("PROTAP Calculation Tool - Based on ASME B31.8 Branch Connection Reinforcement")
+        st.caption("We hereby certify that these calculations are based on the specification referenced above and conform to the standards referenced therein.")
+        
+        # ---- PDF REPORT GENERATION ----
+        st.markdown("### 📄 Export Report")
+        
+        project_data = {
+            "Date": datetime.date.today().strftime("%d %B %Y"),
+            "Project Name": project_name,
+            "Location": location,
+            "Client": client,
+            "Client Ref": client_ref,
+            "PROTAP Ref": protap_ref,
+            "Standard": standard,
+            "Specification": specification
+        }
+        
+        pdf_bytes = create_pdf_report(project_data, saved_params, results)
+        
+        st.download_button(
+            label="⬇️ Download PDF Report",
+            data=pdf_bytes,
+            file_name=f"PROTAP_Calc_{protap_ref.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            type="primary"
+        )
