@@ -292,6 +292,15 @@ def get_plug_height(completion_type, branch_inch):
     return 0
 
 class PDFReport(FPDF):
+    def __init__(self):
+        super().__init__()
+        # Register DejaVu Sans font family (supports Turkish characters: ş ç ğ ı ö ü İ Ş Ç Ğ Ö Ü)
+        font_dir = "/usr/share/fonts/truetype/dejavu"
+        self.add_font("DejaVu", "", os.path.join(font_dir, "DejaVuSans.ttf"))
+        self.add_font("DejaVu", "B", os.path.join(font_dir, "DejaVuSans-Bold.ttf"))
+        self.add_font("DejaVu", "I", os.path.join(font_dir, "DejaVuSans-Oblique.ttf"))
+        self.add_font("DejaVu", "BI", os.path.join(font_dir, "DejaVuSans-BoldOblique.ttf"))
+
     def header(self):
         """This runs automatically every time a new page is created."""
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -303,7 +312,7 @@ class PDFReport(FPDF):
     def footer(self):
         """This runs automatically at the bottom of every page."""
         self.set_y(-15)
-        self.set_font("Helvetica", style="I", size=8)
+        self.set_font("DejaVu", style="I", size=8)
         self.set_text_color(128, 128, 128)
         self.multi_cell(0, 4, f"We hereby certify that these calculations are based on the specification referenced above and conform to the standards referenced therein (ASME B31.8). | Page {self.page_no()}", align="C")
 
@@ -323,37 +332,37 @@ def create_pdf_report(project_info, params, results):
     
     def section_title(title):
         pdf.ln(3)
-        pdf.set_font("Helvetica", style="B", size=12)
+        pdf.set_font("DejaVu", style="B", size=12)
         pdf.set_fill_color(220, 220, 220)
         pdf.cell(0, 8, f" {title}", new_x="LMARGIN", new_y="NEXT", border=1, fill=True)
         pdf.ln(2)
 
     def row(label, value, formula=""):
-        pdf.set_font("Helvetica", style="B", size=10)
+        pdf.set_font("DejaVu", style="B", size=10)
         pdf.cell(COL_LABEL, ROW_H, label, border=0)
-        pdf.set_font("Helvetica", style="", size=10)
+        pdf.set_font("DejaVu", style="", size=10)
         pdf.cell(COL_VALUE, ROW_H, str(value), border=0)
         
         if formula:
-            pdf.set_font("Helvetica", style="I", size=9)
+            pdf.set_font("DejaVu", style="I", size=9)
             pdf.cell(0, ROW_H, str(formula), border=0, new_x="LMARGIN", new_y="NEXT")
         else:
             pdf.ln(ROW_H)
 
     def formula_line(text):
-        pdf.set_font("Helvetica", style="I", size=9)
+        pdf.set_font("DejaVu", style="I", size=9)
         pdf.multi_cell(0, 5, text, new_x="LMARGIN", new_y="NEXT")
 
     # --- Header (Main Title) ---
-    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.set_font("DejaVu", style="B", size=16)
     pdf.cell(0, 10, "PROTAP Hot-Tap / Linestop Calculation Report", new_x="LMARGIN", new_y="NEXT", align="C")
     
-    pdf.set_font("Helvetica", style="I", size=11)
+    pdf.set_font("DejaVu", style="I", size=11)
     pdf.cell(0, 6, "Branch Connection Reinforcement Calculation based on ASME B31.8", new_x="LMARGIN", new_y="NEXT", align="C")
     
     # --- Overall Result Banner ---
     pdf.ln(5)
-    pdf.set_font("Helvetica", style="B", size=14)
+    pdf.set_font("DejaVu", style="B", size=14)
     if results['control_in2'] < 0:
         pdf.set_text_color(0, 128, 0)
         pdf.cell(0, 10, f"OVERALL RESULT: {results['result']}", new_x="LMARGIN", new_y="NEXT", align="C", border=1)
