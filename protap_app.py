@@ -294,12 +294,12 @@ def get_plug_height(completion_type, branch_inch):
 def _find_dejavu_font_dir():
     """Search common paths for DejaVu Sans fonts (supports Turkish characters)."""
     search_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts"),  # bundled with app (priority)
         "/usr/share/fonts/truetype/dejavu",           # Ubuntu / Debian
         "/usr/share/fonts/dejavu-sans-fonts",          # Fedora / RHEL
         "/usr/share/fonts/dejavu",                     # Arch / generic
         "/usr/share/fonts/TTF",                        # some distros
         "/usr/local/share/fonts",                      # manually installed
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts"),  # bundled with app
     ]
     for path in search_paths:
         if os.path.isfile(os.path.join(path, "DejaVuSans.ttf")):
