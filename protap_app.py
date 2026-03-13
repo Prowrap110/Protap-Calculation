@@ -298,8 +298,6 @@ class PDFReport(FPDF):
         logo_path = os.path.join(current_dir, "logo.png")
         
         if os.path.exists(logo_path):
-            # FIX 1: Logo scaled to full usable width (190mm = page width minus margins)
-            # The logo is 2000x279px (7:1 ratio), so at w=190 it will be ~26.5mm tall
             self.image(logo_path, x=10, y=5, w=190)
 
     def footer(self):
@@ -314,17 +312,14 @@ def create_pdf_report(project_info, params, results):
     """Generates a detailed ASME B31.8 compliant PDF report with formulas."""
     pdf = PDFReport()
     
-    # FIX: Increase top margin to 35mm to clear the larger logo (was 30)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_margins(left=10, top=35, right=10) 
     
     pdf.add_page()
 
-    # Column widths for the 3-column row layout
-    COL_LABEL = 55   # Label column width (mm)
-    COL_VALUE = 45   # Value column width (mm)
-    ROW_H = 6        # Standard row height (mm)
-    # Formula column gets the remainder: 190 - 55 - 45 = 90mm
+    COL_LABEL = 55
+    COL_VALUE = 45
+    ROW_H = 6
     
     def section_title(title):
         pdf.ln(3)
@@ -334,7 +329,6 @@ def create_pdf_report(project_info, params, results):
         pdf.ln(2)
 
     def row(label, value, formula=""):
-        """Print a single data row: Label | Value | Formula (all on same line)."""
         pdf.set_font("Helvetica", style="B", size=10)
         pdf.cell(COL_LABEL, ROW_H, label, border=0)
         pdf.set_font("Helvetica", style="", size=10)
@@ -342,16 +336,12 @@ def create_pdf_report(project_info, params, results):
         
         if formula:
             pdf.set_font("Helvetica", style="I", size=9)
-            # FIX 2: Use cell (not multi_cell) to keep formula on the SAME row.
-            # Truncate gracefully if too long — the formula column is ~90mm.
             pdf.cell(0, ROW_H, str(formula), border=0, new_x="LMARGIN", new_y="NEXT")
         else:
             pdf.ln(ROW_H)
 
     def formula_line(text):
-        """Print a standalone formula/description line, properly resetting cursor."""
         pdf.set_font("Helvetica", style="I", size=9)
-        # FIX 3: Always reset cursor to left margin after multi_cell
         pdf.multi_cell(0, 5, text, new_x="LMARGIN", new_y="NEXT")
 
     # --- Header (Main Title) ---
@@ -386,7 +376,7 @@ def create_pdf_report(project_info, params, results):
     row("Temp Derating (T):", params['design_factor_T'])
     row("Corrosion Allow (c):", f"{params['corrosion_allowance_mm']} mm")
     row("Header OD (Dh):", f"{results['header_od_mm']:.1f} mm")
-    row("Branch OD (Db):", f"{results['Db_mm']:.1f} mm")
+    row("Branch (Nozzle) OD (Db):", f"{results['Db_mm']:.1f} mm")
     row("Nominal Hole Dia (d):", f"{results['db_mm']:.1f} mm")
 
     # --- 3. Material Properties ---
@@ -408,22 +398,18 @@ def create_pdf_report(project_info, params, results):
     section_title("5. Area Replacement (ASME B31.8)")
     row("Req. Reinforcement (Ar):", f"{results['Ar_mm2']:.2f} mm2", "Ar = d * th")
     
-    # A1 — formula on its own line, then data row immediately below
     pdf.ln(2)
     formula_line("Available Area in Header (A1) = (Th - th - c) * d")
     row("Header Area (A1):", f"{results['A1_mm2']:.2f} mm2")
     
-    # A2
     pdf.ln(2)
     formula_line("Available Area in Branch (A2') = 2 * Lb * (Tb - tb - c) * (Sb / Sh)")
     row("Branch Area (A2'):", f"{results['A2_prime_mm2']:.2f} mm2")
     
-    # A3
     pdf.ln(2)
     formula_line("Available Area in Reinforcement (A3') = Pad Area * (Sr / Sh)")
     row("Reinf. Area (A3'):", f"{results['A3_prime_mm2']:.2f} mm2")
     
-    # Check
     pdf.ln(3)
     total_avail = results['A1_mm2'] + results['A2_prime_mm2'] + results['A3_prime_mm2']
     row("Total Available:", f"{total_avail:.2f} mm2", "(A1 + A2' + A3')")
@@ -482,7 +468,7 @@ def run_calculation(params):
     r["branch_od_mm"] = lookup_pipe_od_mm(branch_od_inch)
 
     if r["header_od_mm"] is None or r["branch_od_mm"] is None:
-        return {"error": "Invalid pipe size selected. Please check Header and Branch OD."}
+        return {"error": "Invalid pipe size selected. Please check Header and Branch (Nozzle) OD."}
 
     header_wt_in = header_wt_mm / 25.4
     flange_wt_in = flange_wt_mm / 25.4
@@ -755,6 +741,7 @@ st.markdown("---")
 with st.sidebar:
     st.header("📋 Project Information")
     project_name = st.text_input("Sheet Name", value="25-425 PU SRB")
+    product_code = st.text_input("Product Code", value="")
     location = st.text_input("Location", value="SERBIA")
     client = st.text_input("Client / Owner", value="EIC")
     client_ref = st.text_input("Client Ref", value="")
@@ -769,7 +756,7 @@ with col1:
     st.subheader("Pipeline Data")
     available_sizes = sorted(PIPE_OD_LOOKUP.keys())
     header_od_inch = st.selectbox("Header OD (inch)", available_sizes, index=available_sizes.index(32))
-    branch_od_inch = st.selectbox("Branch OD (inch)", available_sizes, index=available_sizes.index(20))
+    branch_od_inch = st.selectbox("Branch (Nozzle) OD (inch)", available_sizes, index=available_sizes.index(20))
     design_pressure = st.number_input("Design Pressure (bar)", value=63.0, min_value=0.1, step=1.0)
     design_factor_F = st.number_input("Design Factor (F)", value=0.5, min_value=0.01, max_value=1.0, step=0.01)
     design_factor_E = st.number_input("Design Factor (E)", value=1.0, min_value=0.01, max_value=1.0, step=0.01)
@@ -872,7 +859,7 @@ if st.session_state.get('is_calculated', False):
             st.subheader("📐 Pipe Calculation")
             st.metric("Pressure Class", results["pressure_class"])
             st.metric("Header OD", f"{results['header_od_mm']:.1f} mm")
-            st.metric("Branch OD (Db)", f"{results['Db_mm']:.1f} mm")
+            st.metric("Branch (Nozzle) OD (Db)", f"{results['Db_mm']:.1f} mm")
             st.metric("Required WT (t)", f"{results['t_required_mm']:.2f} mm")
             st.metric("Excess Header Thickness", f"{results['excess_header_mm']:.2f} mm")
             st.metric("Hoop Stress (S)", f"{results['hoop_stress_psi']:.1f} psi")
@@ -928,8 +915,8 @@ if st.session_state.get('is_calculated', False):
                 "Pressure (psi)": saved_params["design_pressure_bar"] * 14.5,
                 "Header OD (mm)": results["header_od_mm"],
                 "Header OD (in)": results["header_od_mm"] / 25.4,
-                "Branch OD Db (mm)": results["Db_mm"],
-                "Branch OD Db (in)": results["Db_in"],
+                "Branch (Nozzle) OD Db (mm)": results["Db_mm"],
+                "Branch (Nozzle) OD Db (in)": results["Db_in"],
                 "Nominal Hole db (mm)": results["db_mm"],
                 "Nominal Hole db (in)": results["db_in"],
                 "Required WT t (mm)": results["t_required_mm"],
@@ -969,6 +956,7 @@ if st.session_state.get('is_calculated', False):
         project_data = {
             "Date": datetime.date.today().strftime("%d %B %Y"),
             "Project Name": project_name,
+            "Product Code": product_code,
             "Location": location,
             "Client": client,
             "Client Ref": client_ref,
